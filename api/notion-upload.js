@@ -4,27 +4,45 @@ const fetch = require('node-fetch');
 const FormData = require('form-data');
 
 module.exports = async (req, res) => {
+  // Ajouter les en-têtes CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 
   try {
     const { fields, files } = await new Promise((resolve, reject) => {
-      const form = new formidable.IncomingForm({ keepExtensions: true });
+      const form = new formidable.IncomingForm({ 
+        keepExtensions: true,
+        multiples: false // Important: désactive les fichiers multiples
+      });
+      
       form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve({ fields, files });
+        if (err) return reject(err);
+        resolve({ fields, files });
       });
     });
 
-    const title = fields.title[0];
-    const imageFile = files.image[0];
-
-    if (!title || !imageFile) {
-      return res.status(400).json({ error: 'Titre ou image manquant' });
+    // Vérifier les variables d'environnement
+    if (!process.env.NOTION_API_KEY || !process.env.NOTION_DATABASE_ID) {
+      throw new Error('Configuration serveur manquante');
     }
 
-    // Upload image vers Uguu
+    const title = fields.title;
+    const imageFile = files.image;
+
+    if (!title || !imageFile) {
+      throw new Error('Titre ou image manquant');
+    }
+
+    // Upload vers Uguu
     const uploadForm = new FormData();
     uploadForm.append('file', fs.createReadStream(imageFile.filepath), {
       filename: imageFile.originalFilename,
@@ -38,8 +56,8 @@ module.exports = async (req, res) => {
     });
 
     if (!uploadRes.ok) {
-      const error = await uploadRes.text();
-      throw new Error(`Erreur Uguu: ${error}`);
+      const errorText = await uploadRes.text();
+      throw new Error(`Erreur Uguu: ${errorText}`);
     }
 
     const uploadData = await uploadRes.json();
@@ -82,14 +100,22 @@ module.exports = async (req, res) => {
       throw new Error(`Erreur Notion: ${error}`);
     }
 
-    // Nettoyage du fichier temporaire
+    // Nettoyage
     fs.unlink(imageFile.filepath, () => {});
 
-    return res.status(200).json({ success: true, imageUrl });
+    return res.status(200).json({ 
+      success: true,
+      message: "Envoi réussi à Notion",
+      imageUrl
+    });
+    
   } catch (error) {
-    console.error('Erreur:', error.message);
+    // Journalisation de l'erreur complète
+    console.error('ERREUR COMPLÈTE:', error);
+    
     return res.status(500).json({ 
-      error: error.message || 'Erreur serveur' 
+      error: error.message || 'Erreur serveur',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };

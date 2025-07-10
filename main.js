@@ -23,20 +23,31 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
       body: formData
     });
     
-    const data = await response.json();
+    // Gestion spéciale si la réponse n'est pas JSON
+    const contentType = response.headers.get('content-type');
+    let data;
     
-    if (!response.ok) {
-      throw new Error(data.error || "Erreur lors de l'envoi");
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Réponse inattendue: ${text.slice(0, 100)}...`);
     }
     
-    resultDiv.textContent = "Image et titre envoyés avec succès !";
-    resultDiv.className = 'success';
+    if (!response.ok) {
+      throw new Error(data.error || `Erreur ${response.status}`);
+    }
     
-    // Réinitialisation du formulaire
+    resultDiv.innerHTML = `
+      <strong>Succès!</strong><br>
+      Image envoyée: <a href="${data.imageUrl}" target="_blank">${data.imageUrl}</a>
+    `;
+    resultDiv.className = 'success';
     document.getElementById('uploadForm').reset();
     
   } catch (err) {
-    resultDiv.textContent = err.message || "Erreur réseau ou serveur";
+    resultDiv.textContent = err.message || "Erreur inconnue";
     resultDiv.className = 'error';
+    console.error('Erreur frontend:', err);
   }
 });
