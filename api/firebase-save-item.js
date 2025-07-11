@@ -1,7 +1,21 @@
 // api/firebase-save-item.js
 
 const admin = require('firebase-admin');
-const serviceAccount = require('./firebase-adminsdk.json'); // Chemin vers votre fichier de compte de service
+
+// Charge la clé du compte de service depuis la variable d'environnement
+// Il est important de la parser car la variable d'environnement est une chaîne de caractères
+let serviceAccount;
+try {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+} catch (e) {
+    console.error('Erreur lors du parsing de la variable d\'environnement FIREBASE_SERVICE_ACCOUNT_KEY:', e);
+    // En cas d'erreur de parsing, on peut renvoyer une erreur explicite
+    module.exports = (request, response) => {
+        return response.status(500).json({ error: 'Configuration du serveur Firebase invalide.' });
+    };
+    return; // Arrête l'exécution de la fonction
+}
+
 
 // Initialise Firebase Admin SDK si ce n'est pas déjà fait
 if (!admin.apps.length) {
